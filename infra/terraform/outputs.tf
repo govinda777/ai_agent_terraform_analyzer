@@ -1,39 +1,39 @@
 output "cluster_id" {
   description = "ID do cluster EKS"
-  value       = module.eks.cluster_id
+  value       = try(module.eks[0].cluster_id, "")
 }
 
 output "cluster_endpoint" {
   description = "Endpoint do cluster EKS"
-  value       = module.eks.cluster_endpoint
+  value       = try(module.eks[0].cluster_endpoint, "")
 }
 
 output "cluster_security_group_id" {
   description = "ID do security group do cluster EKS"
-  value       = module.eks.cluster_security_group_id
+  value       = try(module.eks[0].cluster_security_group_id, "")
 }
 
 output "kubectl_config" {
   description = "Comando para configurar o kubectl"
-  value       = "aws eks update-kubeconfig --region ${var.aws_region} --name ${module.eks.cluster_id}"
+  value       = "aws eks update-kubeconfig --region ${var.aws_region} --name ${try(module.eks[0].cluster_id, "")}"
 }
 
 output "rds_endpoint" {
   description = "Endpoint da instância RDS"
-  value       = aws_db_instance.freqtrade.address
+  value       = length(aws_db_instance.freqtrade) > 0 ? aws_db_instance.freqtrade[0].address : ""
 }
 
 output "rds_port" {
   description = "Porta da instância RDS"
-  value       = aws_db_instance.freqtrade.port
+  value       = length(aws_db_instance.freqtrade) > 0 ? aws_db_instance.freqtrade[0].port : 0
 }
 
 output "rds_username" {
   description = "Usuário da instância RDS"
-  value       = aws_db_instance.freqtrade.username
+  value       = length(aws_db_instance.freqtrade) > 0 ? aws_db_instance.freqtrade[0].username : ""
 }
 
 output "rds_database_name" {
   description = "Nome do banco de dados RDS"
-  value       = aws_db_instance.freqtrade.db_name
+  value       = length(aws_db_instance.freqtrade) > 0 ? aws_db_instance.freqtrade[0].db_name : ""
 }

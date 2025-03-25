@@ -1,174 +1,78 @@
-Perfeito! Com base no seu stack e nos fluxos que discutimos, aqui está uma **arquitetura de infraestrutura detalhada** para sua plataforma `bot_freqtrade_strategies`, incluindo os componentes AWS, Kubernetes, Helm, GitOps com ArgoCD, Freqtrade services e a sua **Facade API** que interage com a blockchain e gerencia os bots.
+# Infraestrutura do Projeto bot_freqtrade_strategies
 
----
+Este documento fornece uma visão abrangente sobre a infraestrutura utilizada no projeto, detalhando os componentes, a arquitetura, os fluxos operacionais e as boas práticas para deploy e manutenção dos bots de trading.
 
-# 🏗️ Arquitetura de Infraestrutura – `bot_freqtrade_strategies`
+## 1. Introdução
 
----
+O projeto bot_freqtrade_strategies é uma solução robusta para a operação e gerenciamento de bots de trading. A infraestrutura deste projeto é montada sobre tecnologias modernas que garantem escalabilidade, robustez e facilidade de manutenção, utilizando ferramentas como Terraform, Kubernetes (AWS EKS), Helm, ArgoCD e pipelines CI/CD com GitHub Actions.
 
-## 🔧 Tecnologias Principais
+## 2. Componentes Principais
 
-| Camada        | Tecnologia            | Descrição                                                                                                                                      |
-|---------------|------------------------|------------------------------------------------------------------------------------------------------------------------------------------------|
-| Orquestração  | **AWS EKS**            | Cluster Kubernetes gerenciado onde rodam os Pods de bots e serviços                                                                           |
-| Banco de dados| **AWS RDS (PostgreSQL)** | Banco compartilhado com múltiplos **schemas isolados por cliente**                                                                             |
-| Deploy GitOps | **Helm + ArgoCD**      | Helm para templates parametrizáveis de bots, ArgoCD para aplicar automaticamente configurações do Git                                          |
-| Deploy CI/CD  | **GitHub Actions**     | Automação de build das imagens Docker e commit dos values/configs específicos no repositório monitorado pelo ArgoCD                           |
-| Execução bots | **Freqtrade Docker**   | Imagem Docker customizada com `init-schema.sh`, configurável via ENV                                                                          |
-| Backend API   | **Facade API (Node/Python)** | Recebe comandos criptografados, gerencia lógica de deploy dos bots, interage com a blockchain, PostgreSQL e Git                                |
+### 2.1 Provisionamento e Gerenciamento de Infraestrutura
+- **Terraform:** Responsável por definir e provisionar os recursos na AWS, incluindo clusters EKS, instâncias RDS, configurações de IAM e VPC.
+- **AWS EKS:** Hospeda os containers que executam os bots Freqtrade, possibilitando gerenciamento centralizado e escalabilidade.
 
----
+### 2.2 Deploy e Orquestração
+- **ArgoCD:** Automatiza o deploy e garante a sincronização contínua entre o repositório e o ambiente Kubernetes.
+- **Helm:** Simplifica a instalação e a gestão das aplicações Kubernetes mediante os Helm Charts.
 
-## 📐 Diagrama de Arquitetura (resumo)
+### 2.3 Integração Contínua
+- **GitHub Actions:** Automatiza testes, deploys e integrações, assegurando que todas as alterações sejam testadas e aplicadas de forma consistente.
+
+## 3. Arquitetura da Infraestrutura
+
+A arquitetura do projeto é ilustrada pelo diagrama abaixo:
 
 ```mermaid
-flowchart TD
-    Client[💸 Cliente com Wallet] -->|EncryptedCommand| Blockchain
-    Blockchain -->|Evento: NewTrade| FacadeAPI
-
-    subgraph VPC AWS
-      EKS[(EKS Cluster)]
-      RDS[(PostgreSQL RDS<br>multi-schema)]
-
-      subgraph Freqtrade Bots [Pods Freqtrade]
-        Bot1[Pod bot-cliente-001]
-        Bot2[Pod bot-cliente-002]
-      end
-
-      ArgoCD
-      Helm
-      FacadeAPI --> GitHub[GitHub Actions / Push values.yaml]
-      GitHub --> ArgoCD
-      ArgoCD -->|Helm install| Bot1 & Bot2
-      Bot1 & Bot2 --> RDS
-    end
-
-    FacadeAPI -->|status| Blockchain
+flowchart LR
+    A[Terraform] --> B[AWS EKS]
+    B --> C[Pods Freqtrade]
+    C --> D[RDS (PostgreSQL)]
+    B --> E[ArgoCD & Helm]
+    F[GitHub Actions] --> E
 ```
 
----
+## 4. Organização do Repositório
 
-## ⚙️ Componentes Detalhados
+A estrutura da infraestrutura no repositório está organizada da seguinte forma:
 
-### 🔹 1. **EKS Cluster**
-- Hospeda todos os **Pods de bots** (`freqtrade trade`) e serviços internos (Facade API, ArgoCD, etc.)
-- Criado e gerenciado via **Terraform** (`eks.tf`)
-- Possui namespaces:
-  - `freqtrade` (bots)
-  - `infra` (ArgoCD, ingress, secrets)
-
-### 🔹 2. **RDS PostgreSQL**
-- Um banco de dados Postgres único, com **um schema por cliente**
-- Usuários distintos com permissão restrita ao seu schema
-- Cada Pod recebe `DATABASE_URL` com `search_path=cliente_xyz`
-
-### 🔹 3. **Freqtrade Service (Docker Image)**
-- Baseada em `freqtradeorg/freqtrade:stable`
-- Customizada com:
-  - `init-schema.sh` que cria schema ao subir o Pod
-  - Estratégias padrão + suporte a estratégias personalizadas via volume/ENV
-- Expõe API na porta 8080 (`/api/v1/ping`, `/status`, etc.)
-
-### 🔹 4. **Facade API**
-- Serviço HTTP rodando no EKS (ou ECS se quiser desacoplar)
-- Responsável por:
-  - Escutar eventos da blockchain (`EncryptedCommand`)
-  - Descriptografar e montar config do cliente
-  - Criar `values.yaml` e fazer commit no Git
-  - Monitorar health dos bots
-  - Confirmar sucesso/falha via **approve/rollback** on-chain
-
-### 🔹 5. **ArgoCD + Helm**
-- ArgoCD observa repositório Git (com pasta `clientes/cliente-001/values.yaml`)
-- Helm template parametriza a criação do bot (envs, estratégia, banco)
-- ArgoCD faz deploy automático no cluster
-
-### 🔹 6. **GitHub Actions**
-- Executa:
-  - Build da imagem Freqtrade (`Dockerfile.freqtrade`)
-  - Push para o registry
-  - Commit de `values.yaml` em `/clientes/cliente-001`
-- ArgoCD detecta e aplica
-
----
-
-## 🔁 Fluxo completo de **Nova Trade**
-
-1. **Cliente envia transação on-chain** com comando `EncryptedCommand`
-2. **Facade API detecta o evento** e descriptografa a mensagem
-3. API monta:
-   - `FREQTRADE_STRATEGY`
-   - `BINANCE_API_KEY`, `BINANCE_SECRET_KEY`
-   - `DATABASE_URL` com `search_path=cliente_123`
-4. API **cria ou atualiza** `values.yaml` do cliente (ex: `/clientes/cliente-123/values.yaml`)
-5. API **faz commit no Git**
-6. ArgoCD detecta e aplica via Helm:
-   - Cria um novo Pod com o bot
-   - Executa `init-schema.sh` para criar o schema (se não existir)
-   - Inicia `freqtrade trade` no Pod
-7. API monitora `/api/v1/ping` + logs
-8. Se estiver OK → emite **approve()**
-9. Se falhar → emite **rollback()**
-
----
-
-## 📁 Organização do Repositório Git
-
-```bash
-/
-├── infra/
-│   ├── charts/
-│   │   └── freqtrade/
-│   │       ├── templates/
-│   │       ├── values.yaml       # valores padrão
-│   │       └── Chart.yaml
-│   ├── scripts/
-│   │   └── init-schema.sh
-│   └── argocd-application.yaml
-├── clientes/
-│   ├── cliente-001/
-│   │   └── values.yaml
-│   ├── cliente-002/
-│   │   └── values.yaml
-├── Dockerfile.freqtrade
-└── .github/
-    └── workflows/
-        └── deploy-bot.yml  # CI/CD GitHub Actions
+```mermaid
+graph TD
+    A[charts/freqtrade] -->|Helm Charts| B[argocd-application.yaml]
+    C[terraform] -->|Provisionamento| D[EKS, RDS, IAM]
+    E[clientes] -->|Configuração Específica| F[values.yaml]
+    G[.github/workflows] -->|CI/CD| H[deploy-bot.yml]
+    I[infra] -->|Scripts e Configurações| J[docker-compose.yml, Dockerfiles, scripts]
 ```
 
----
+## 5. Fluxos Operacionais
 
-## ✅ Infraestrutura como Código
+### 5.1 Deploy e Sincronização
+- **Deploy de Bots:** Atualize o arquivo <code>values.yaml</code> em <code>clientes/</code> para configurar novos bots.
+- **Sincronização:** As mudanças são automaticamente sincronizadas via ArgoCD, que atualiza o ambiente Kubernetes conforme necessário.
 
-### Terraform (`/terraform`)
-- `eks.tf`: cluster EKS
-- `rds.tf`: instância RDS Postgres
-- `iam.tf`: roles e policies para acesso ao RDS
-- `vpc.tf`: rede, subnets, NAT gateway, etc.
-- `outputs.tf`, `variables.tf`
+### 5.2 Inicialização e Atualização
+- **Scripts de Inicialização:** Utilizados para a criação de schemas no RDS e outras configurações essenciais.
+- **CI/CD:** O pipeline do GitHub Actions automatiza a integração e o deploy contínuo, garantindo alta disponibilidade e atualizações sem interrupções.
 
----
+## 6. Pré-Requisitos e Configurações
 
-## 🚀 Benefícios da Arquitetura
+- **Credenciais AWS:** Verifique e atualize as credenciais necessárias para acesso aos serviços AWS (IAM, RDS, EKS).
+- **Ferramentas Necessárias:** Certifique-se de ter o Terraform, Helm e ArgoCD instalados e configurados corretamente.
+- **Ambiente Local:** Garanta que o ambiente de desenvolvimento esteja alinhado com as configurações do repositório e com as práticas recomendadas.
 
-| Requisito                        | Atendido |
-|----------------------------------|----------|
-| Isolamento de dados por cliente | ✅        |
-| Deploy dinâmico por evento      | ✅        |
-| Escalável (100+ bots)           | ✅        |
-| Seguro (separação por schema + usuário) | ✅   |
-| GitOps / Auditável              | ✅        |
-| Sem dependência de plataforma PaaS | ✅     |
+## 7. Guia de Uso e Manutenção
 
----
+- **Provisionamento:** Utilize os scripts e arquivos em <code>terraform/</code> para criar ou atualizar a infraestrutura.
+- **Deploy:** Modifique os arquivos de configuração (ex: <code>values.yaml</code>) e monitore o deploy via ArgoCD.
+- **Manutenção:** Revise e atualize os scripts de inicialização e deploy conforme necessário para manter a infraestrutura otimizada e segura.
 
-## Próximos passos
+## 8. Notas e Recomendações
 
-Se quiser, posso agora:
+- Mantenha a documentação e os scripts atualizados conforme evoluções e mudanças na arquitetura.
+- Consulte a documentação complementar no arquivo <code>INFRA_ARQ.md</code> para obter detalhes avançados sobre o provisionamento e configurações específicas.
+- Realize revisões periódicas dos processos de deploy para garantir a eficácia e a segurança do ambiente.
 
-✅ Gerar um exemplo de `values.yaml` para cliente  
-✅ Criar um `argocd-application.yaml` por cliente  
-✅ Escrever um `deploy-bot.sh` que simula a ação da Facade API  
-✅ Esboçar a API de backend (Node/Python) que automatiza tudo
+## 9. Contatos e Suporte
 
-Qual dessas partes você quer que eu gere agora?
+Em caso de dúvidas ou para suporte adicional, entre em contato com a equipe responsável pela infraestrutura do projeto.
