@@ -135,6 +135,18 @@ A seguir, um diagrama simplificado da arquitetura do projeto:
 - **Aprimoramento do Parsing:** Refinar o parsing dos arquivos Terraform para diagnósticos mais precisos.
 - **Expansão de Funcionalidades:** Adicionar novos módulos para análise de segurança e conformidade.
 
+## Fluxo de Trabalho
+
+1 - Subir ambiente
+2 - Executar plan
+3 - Executar o applay
+4 - Analisa a documentação da Stack
+5 - Analisa as permissões IAM para ajuste
+7 - Faz um prompt para AI (https://mistral.ai/?utm_source=chatgpt.com)
+8 - Pede sugestões para a LLM de melhoria
+9 - Implementa a melhoria (change tf files) --> Plan --> Applay
+10 - Verifica se tem novas sugestões.
+
 ## Contribuição
 
 Contribuições são bem-vindas!  
