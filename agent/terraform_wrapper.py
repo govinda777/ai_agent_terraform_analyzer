@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+
+# Classe responsavel por executar o terraform
 import subprocess
 import os
 
