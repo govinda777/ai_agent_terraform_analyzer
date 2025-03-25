@@ -2,6 +2,32 @@
 
 O **AI Agent Terraform Analyzer** é um agente inteligente projetado para gerenciar e otimizar stacks Terraform com automação inteligente e simulação de ambiente Cloud utilizando o [LocalStack](https://localstack.cloud/).
 
+```mermaid
+flowchart TD
+    A[Subir ambiente]
+    B[Executar plan]
+    C[Executar apply]
+    D[Analisa a documentação da Stack]
+    E[Analisa as permissões IAM para ajuste]
+    F[Faz um prompt para AI mistral]
+    G[Pede sugestões para a LLM de melhoria]
+    H[Implementa a melhoria altera arquivos tf]
+    I[Executa novo Plan e Apply]
+    J[Verifica se há novas sugestões]
+    K[Fim do fluxo]
+
+    A --> B
+    B --> C
+    C --> D
+    D --> E
+    E --> F
+    F --> G
+    G --> H
+    H --> I
+    I --> J
+    J -- "Sim" --> F
+    J -- "Não" --> K
+```
 ## Sumário
 
 - [Visão Geral](#visão-geral)
@@ -105,7 +131,7 @@ Ciclo de melhoria concluído.
 
 A seguir, um diagrama simplificado da arquitetura do projeto:
 
-![Diagrama de Arquitetura](https://via.placeholder.com/800x400?text=Diagrama+de+Arquitetura)
+
 
 > O diagrama ilustra a interação entre os módulos do agente e seus respectivos papéis:
 > - **agent/main.py**: Inicia o ciclo do agente.
